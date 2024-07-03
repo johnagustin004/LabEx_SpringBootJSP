@@ -1,0 +1,83 @@
+
+Here’s a Dockerfile that sets up a Jenkins instance with JDK 21 and the Maven Integration plugin pre-installed:
+
+1. Copy Dockerfile code below (filename: Dockerfile)
+====================================================================
+
+FROM jenkins/jenkins:lts
+
+# Switch to root user to install packages
+USER root
+
+# Install necessary tools
+RUN apt-get update && \
+    apt-get install -y wget tar
+
+# Install JDK 21
+RUN wget -O /tmp/openjdk-21_linux-x64_bin.tar.gz https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz && \
+    mkdir -p /usr/lib/jvm && \
+    tar -xvf /tmp/openjdk-21_linux-x64_bin.tar.gz -C /usr/lib/jvm && \
+    ln -s /usr/lib/jvm/jdk-21 /usr/lib/jvm/default-java && \
+    rm /tmp/openjdk-21_linux-x64_bin.tar.gz
+
+# Set JAVA_HOME environment variable
+ENV JAVA_HOME /usr/lib/jvm/default-java
+ENV PATH $JAVA_HOME/bin:$PATH
+
+# Switch back to the jenkins user
+USER jenkins
+
+# Install plugins (including Maven Integration)
+RUN jenkins-plugin-cli --plugins "git maven-plugin"
+
+# Create a default admin user (optional)
+COPY --chown=jenkins:jenkins default-user.groovy /usr/share/jenkins/ref/init.groovy.d/
+
+# Entry point
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/jenkins.sh"]
+
+# Expose ports
+EXPOSE 8080 50000
+
+====================================================================
+
+2. Create Default Admin User. Create a default admin user by adding a Groovy script. This script will automatically create an admin user when the Jenkins container is first started.
+====================================================================
+default-user.groovy
+Create a file named default-user.groovy with the following content:
+
+groovy
+Copy code
+import jenkins.model.*
+import hudson.security.*
+import hudson.util.*;
+
+def instance = Jenkins.getInstance()
+def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+hudsonRealm.createAccount("admin", "admin")
+instance.setSecurityRealm(hudsonRealm)
+def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+instance.setAuthorizationStrategy(strategy)
+instance.save()
+
+====================================================================
+
+3. Build and Run the Docker Image
+Save the Dockerfile content to a file named Dockerfile.
+
+Build the Docker Image:
+Open a terminal and navigate to the directory containing the Dockerfile, then run:
+
+====================================================================
+docker build -t jenkins-jdk21-maven .
+====================================================================
+
+
+4. Run the Docker Container:
+Run the container with the following command:
+====================================================================
+docker run -d -p 8080:8080 -p 50000:50000 --name jenkins-jdk21-maven jenkins-jdk21-maven
+====================================================================
+
+5. Access Jenkins:
+Open a web browser and navigate to http://localhost:8080. Follow the initial setup steps to complete the Jenkins configuration.
